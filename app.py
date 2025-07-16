@@ -9,24 +9,40 @@ Original file is located at
 
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+import re
+from datetime import datetime, date
 import os
 
-# Crear carpeta de documentos si no existe
+# Crear carpeta de documentos
 os.makedirs("documentos", exist_ok=True)
 
 st.set_page_config(page_title="Formulario de Matrícula", layout="centered")
 st.title("📄 Formulario de Matrícula Preescolar")
 
-st.markdown("Por favor diligencia todos los campos y adjunta los documentos obligatorios.")
+# Funciones de validación
+def solo_letras(campo, etiqueta):
+    if campo and not re.match(r"^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$", campo):
+        st.warning(f"{etiqueta} solo debe contener letras.")
+        return ""
+    return campo
+
+def solo_numeros(campo, etiqueta, max_len=20):
+    if campo and (not campo.isdigit() or len(campo) > max_len):
+        st.warning(f"{etiqueta} debe contener solo números y máximo {max_len} dígitos.")
+        return ""
+    return campo
 
 with st.form("formulario"):
     st.subheader("🧒 A. Información del Estudiante")
-    nombre_est = st.text_input("Nombres completos del estudiante")
-    apellido_est = st.text_input("Apellidos completos del estudiante")
-    tipo_doc_est = st.selectbox("Tipo de documento", ["RC", "TI", "CE"])
-    num_doc_est = st.text_input("Número de documento")
-    fecha_nac = st.date_input("Fecha de nacimiento")
+
+    primer_nombre = solo_letras(st.text_input("Primer nombre del estudiante"), "Primer nombre")
+    segundo_nombre = solo_letras(st.text_input("Segundo nombre del estudiante"), "Segundo nombre")
+    primer_apellido = solo_letras(st.text_input("Primer apellido del estudiante"), "Primer apellido")
+    segundo_apellido = solo_letras(st.text_input("Segundo apellido del estudiante"), "Segundo apellido")
+
+    num_doc_est = solo_numeros(st.text_input("Número de documento del estudiante (solo números, máx. 20 dígitos)"), "Documento del estudiante")
+
+    fecha_nac = st.date_input("Fecha de nacimiento", min_value=date(2000, 1, 1), max_value=date.today())
     lugar_nac = st.text_input("Lugar de nacimiento (Ciudad / Departamento)")
     edad = st.number_input("Edad actual", min_value=3, max_value=6, step=1)
     grupo_etnico = st.selectbox("Grupo étnico", ["Indígena", "Afro", "ROM", "Otro"])
@@ -34,9 +50,14 @@ with st.form("formulario"):
     nivel = st.selectbox("Nivel a matricular", ["Prejardín", "Jardín", "Transición"])
 
     st.subheader("👤 B. Información del Acudiente Principal")
-    nombre_acu = st.text_input("Nombre completo del acudiente")
+
+    nombre_acu = solo_letras(st.text_input("Nombre completo del acudiente"), "Nombre del acudiente")
     parentesco = st.selectbox("Parentesco con el estudiante", ["Madre", "Padre", "Tío/a", "Abuelo/a", "Otro"])
-    doc_acu = st.text_input("Tipo y número de documento del acudiente")
+    if parentesco == "Otro":
+        parentesco_otro = solo_letras(st.text_input("Especifica el parentesco (solo letras)"), "Parentesco")
+        parentesco = parentesco_otro if parentesco_otro else parentesco
+
+    doc_acu = solo_numeros(st.text_input("Número de documento del acudiente (solo números, máx. 20 dígitos)"), "Documento del acudiente")
     tel = st.text_input("Teléfono de contacto")
     correo = st.text_input("Correo electrónico")
     direccion = st.text_input("Dirección de residencia")
@@ -55,11 +76,9 @@ with st.form("formulario"):
     enviado = st.form_submit_button("✅ Enviar inscripción")
 
     if enviado:
-        # Crear identificador único por estudiante
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        doc_id = f"{nombre_est}_{apellido_est}_{num_doc_est}_{timestamp}".replace(" ", "_")
+        doc_id = f"{primer_nombre}_{primer_apellido}_{num_doc_est}_{timestamp}".replace(" ", "_")
 
-        # Función para guardar y devolver el nombre del archivo
         def guardar_doc(file, nombre):
             if file:
                 ext = file.name.split(".")[-1]
@@ -77,13 +96,13 @@ with st.form("formulario"):
         archivo_recibo = guardar_doc(doc_recibo, "recibo")
         archivo_adicional = guardar_doc(doc_adicional, "adicional")
 
-        # Guardar en Excel
         data = {
             "Fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "Nombre estudiante": nombre_est,
-            "Apellido estudiante": apellido_est,
-            "Tipo doc": tipo_doc_est,
-            "N° doc": num_doc_est,
+            "Primer nombre": primer_nombre,
+            "Segundo nombre": segundo_nombre,
+            "Primer apellido": primer_apellido,
+            "Segundo apellido": segundo_apellido,
+            "N° doc estudiante": num_doc_est,
             "Fecha nacimiento": fecha_nac,
             "Lugar nacimiento": lugar_nac,
             "Edad": edad,
@@ -115,32 +134,24 @@ with st.form("formulario"):
             df_nuevo = pd.DataFrame([data])
 
         df_nuevo.to_excel(archivo_excel, index=False)
-
         st.success("✅ Inscripción enviada y documentos guardados exitosamente.")
 
-# Mostrar resumen de datos al final
+# Mostrar resumen
 st.markdown("---")
 st.subheader("📊 Registros actuales (sesión activa)")
 
 try:
     df = pd.read_excel("encuestas.xlsx")
-    st.dataframe(df.tail(5))  # muestra los 5 últimos registros
+    st.dataframe(df.tail(5))  # últimos 5 registros
 
-    # Botón para descargar Excel
     with open("encuestas.xlsx", "rb") as file:
         st.download_button("📥 Descargar Excel completo", file, file_name="encuestas.xlsx")
 
-except FileNotFoundError:
-    st.warning("Aún no hay registros guardados.")
+    st.markdown("---")
+    st.subheader("📎 Descarga de documentos individuales")
 
-st.markdown("---")
-st.subheader("📎 Descarga de documentos individuales")
-
-# Ver si hay documentos disponibles
-if "Archivo RC" in df.columns:
-    seleccion = st.selectbox("Selecciona un estudiante para ver sus archivos:", df["Nombre estudiante"] + " " + df["Apellido estudiante"])
-
-    fila = df[df["Nombre estudiante"] + " " + df["Apellido estudiante"] == seleccion].iloc[0]
+    seleccion = st.selectbox("Selecciona un estudiante:", df["Primer nombre"] + " " + df["Primer apellido"])
+    fila = df[df["Primer nombre"] + " " + df["Primer apellido"] == seleccion].iloc[0]
 
     docs = {
         "Registro civil": fila["Archivo RC"],
@@ -157,3 +168,6 @@ if "Archivo RC" in df.columns:
                 st.download_button(f"📄 Descargar {nombre}", file, file_name=archivo)
         else:
             st.write(f"⚠️ {nombre}: No cargado.")
+
+except FileNotFoundError:
+    st.warning("Aún no hay registros disponibles.")
