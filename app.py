@@ -77,7 +77,7 @@ with st.form("formulario"):
         archivo_recibo = guardar_doc(doc_recibo, "recibo")
         archivo_adicional = guardar_doc(doc_adicional, "adicional")
 
-        # Guardar info general y nombres de archivos en Excel
+        # Guardar en Excel
         data = {
             "Fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "Nombre estudiante": nombre_est,
@@ -107,7 +107,6 @@ with st.form("formulario"):
             "Archivo Adicional": archivo_adicional
         }
 
-        # Guardar en Excel
         archivo_excel = "encuestas.xlsx"
         try:
             df_existente = pd.read_excel(archivo_excel)
@@ -118,3 +117,43 @@ with st.form("formulario"):
         df_nuevo.to_excel(archivo_excel, index=False)
 
         st.success("✅ Inscripción enviada y documentos guardados exitosamente.")
+
+# Mostrar resumen de datos al final
+st.markdown("---")
+st.subheader("📊 Registros actuales (sesión activa)")
+
+try:
+    df = pd.read_excel("encuestas.xlsx")
+    st.dataframe(df.tail(5))  # muestra los 5 últimos registros
+
+    # Botón para descargar Excel
+    with open("encuestas.xlsx", "rb") as file:
+        st.download_button("📥 Descargar Excel completo", file, file_name="encuestas.xlsx")
+
+except FileNotFoundError:
+    st.warning("Aún no hay registros guardados.")
+
+st.markdown("---")
+st.subheader("📎 Descarga de documentos individuales")
+
+# Ver si hay documentos disponibles
+if "Archivo RC" in df.columns:
+    seleccion = st.selectbox("Selecciona un estudiante para ver sus archivos:", df["Nombre estudiante"] + " " + df["Apellido estudiante"])
+
+    fila = df[df["Nombre estudiante"] + " " + df["Apellido estudiante"] == seleccion].iloc[0]
+
+    docs = {
+        "Registro civil": fila["Archivo RC"],
+        "Cédula acudiente": fila["Archivo Cédula"],
+        "EPS o Sisbén": fila["Archivo EPS"],
+        "Vacunación": fila["Archivo Vacunación"],
+        "Recibo público": fila["Archivo Recibo"],
+        "Certificado adicional": fila["Archivo Adicional"]
+    }
+
+    for nombre, archivo in docs.items():
+        if archivo and os.path.exists(os.path.join("documentos", archivo)):
+            with open(os.path.join("documentos", archivo), "rb") as file:
+                st.download_button(f"📄 Descargar {nombre}", file, file_name=archivo)
+        else:
+            st.write(f"⚠️ {nombre}: No cargado.")
